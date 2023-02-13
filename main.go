@@ -18,7 +18,11 @@ func main() {
 
 	var exitCode int
 
-	f := do(os.Open(abs))
+	f, err := os.Open(abs)
+	if err != nil {
+		fmt.Println("No preview available for:\n", fname)
+		os.Exit(0)
+	}
 	defer func() {
 		f.Close()
 		os.Exit(exitCode)
@@ -52,7 +56,7 @@ func main() {
 		}
 	case mimeType.MIME.Type == "video":
 		// only capture 1st frame since since fzf preview is not interactive
-		exitCode = execer("timg", "-g", "80x40", "--frames", "1", "-V", abs)
+		exitCode = execer("timg", "-g", "80x400", "--frames", "1", "-V", abs)
 	case mimeType.Extension == "sqlite":
 		exitCode = piper(
 			[]string{"sqlite3", abs, ".tables"},
