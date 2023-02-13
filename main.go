@@ -67,6 +67,8 @@ func main() {
 		switch ext {
 		case ".md":
 			exitCode = execer("mdcat", abs)
+		case ".dmg":
+			exitCode = execer("7zz", "l", abs)
 		default:
 			// test if this is a binary file
 			exitCode = execer("grep", "-E", `\x00`, abs)
