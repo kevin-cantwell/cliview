@@ -1,4 +1,4 @@
-module github.com/kevin-cantwell/peek
+module github.com/kevin-cantwell/fzf-preview
 
 go 1.19
 
