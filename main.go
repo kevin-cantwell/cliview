@@ -59,6 +59,10 @@ func main() {
 			[]string{"tr", "-s", " ", `\n`},
 			[]string{"xargs", "-I{}", "sqlite3", "-cmd", "select char(10) || '{}:'", "-cmd", ".mode column", abs, "pragma table_info('{}')"},
 		)
+	case mimeType.Extension == "zip":
+		exitCode = execer("zipinfo", "-2hz", abs)
+	case mimeType.Extension == "gz":
+		exitCode = execer("tar", "-tf", abs)
 	default:
 		switch ext {
 		case ".md":
