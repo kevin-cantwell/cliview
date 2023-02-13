@@ -71,7 +71,12 @@ func main() {
 			exitCode = execer("7zz", "l", abs)
 		default:
 			// test if this is a binary file
-			exitCode = execer("grep", "-E", `\x00`, abs)
+			err := exec.Command("grep", "-E", `\x00`, abs).Run()
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					exitCode = exitErr.ExitCode()
+				}
+			}
 			if exitCode == 0 {
 				// if so, display all non-printable characters
 				exitCode = execer("bat", "-nA", "--color=always", abs)
