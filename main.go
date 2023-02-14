@@ -1,102 +1,163 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
+	"strings"
 
-	"github.com/h2non/filetype"
+	"gopkg.in/yaml.v2"
+
+	_ "embed"
 )
 
+//go:embed default-config.yml
+var config []byte
+
 func main() {
-	fname := os.Args[1]
-	abs := do(filepath.Abs(fname))
+	maybeWriteDefaultConfig()
+	conf := loadConfig()
 
-	var exitCode int
-
-	f, err := os.Open(abs)
-	if err != nil {
-		fmt.Println("No preview available for:\n", fname)
-		os.Exit(0)
-	}
-	defer func() {
-		f.Close()
-		os.Exit(exitCode)
-	}()
-
-	if do(f.Stat()).IsDir() {
-		exitCode = execer("exa", "-T", abs)
-		return
-	}
-
-	r := bufio.NewReader(f)
-	b, err := r.Peek(512)
-	if err != nil && err != io.EOF {
-		fmt.Println(err)
-		exitCode = 1
-		return
-	}
-	mimeType := do(filetype.Match(b))
-	ext := filepath.Ext(abs)
-
-	fmt.Printf("%s: %s\n", ext, mimeType.MIME.Value)
+	arg := os.Args[1]
 
 	switch {
-	case mimeType.MIME.Type == "image":
-		switch mimeType.MIME.Subtype {
-		case "gif":
-			// only allow .01s of animation for gifs, since fzf preview is not interactive
-			exitCode = execer("timg", "-g", "80x400", "-t", ".01", abs)
-		default:
-			exitCode = execer("timg", "-g", "80x400", abs)
+	// case isDir(arg):
+	// 	handleDir(conf, arg)
+	case isFile(arg):
+		handleFile(conf, arg)
+	case isURL(arg):
+		handleURL(conf, arg)
+	}
+	fmt.Println("No preview available for:\n", arg)
+}
+
+type Config struct {
+	Mimes      yaml.MapSlice
+	Extensions yaml.MapSlice
+	URLs       yaml.MapSlice
+	Default    string
+}
+
+type MIME struct {
+	Type    string
+	Subtype string
+	Value   string
+}
+
+func parseMIME(s string) MIME {
+	parts := strings.Split(s, "/")
+	typ := strings.TrimSpace(parts[0])
+	if len(parts) == 1 {
+		return MIME{
+			Type:    typ,
+			Subtype: "",
+			Value:   typ,
 		}
-	case mimeType.MIME.Type == "video":
-		// only capture 1st frame since since fzf preview is not interactive
-		exitCode = execer("timg", "-g", "80x400", "--frames", "1", "-V", abs)
-	case mimeType.Extension == "sqlite":
-		exitCode = piper(
-			[]string{"sqlite3", abs, ".tables"},
-			[]string{"tr", "-s", " ", `\n`},
-			[]string{"xargs", "-I{}", "sqlite3", "-cmd", "select char(10) || '{}:'", "-cmd", ".mode column", abs, "pragma table_info('{}')"},
-		)
-	case mimeType.Extension == "zip":
-		exitCode = execer("zipinfo", "-2hz", abs)
-	case mimeType.Extension == "gz":
-		exitCode = execer("tar", "-tf", abs)
-	default:
-		switch ext {
-		case ".md":
-			exitCode = execer("mdcat", abs)
-		case ".dmg":
-			exitCode = execer("7zz", "l", abs)
-		default:
-			// test if this is a binary file
-			err := exec.Command("grep", "-E", `\x00`, abs).Run()
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					exitCode = exitErr.ExitCode()
-				}
-			}
-			if exitCode == 0 {
-				// if so, display all non-printable characters
-				exitCode = execer("bat", "-nA", "--color=always", abs)
-			} else {
-				// if not, display only printable characters
-				exitCode = execer("bat", "-n", "--color=always", abs)
+	}
+	sub := strings.TrimSpace(parts[1])
+	return MIME{
+		Type:    typ,
+		Subtype: sub,
+		Value:   typ + "/" + sub,
+	}
+}
+
+// func isDir(arg string) bool {
+// 	if info, err := os.Stat(arg); err != nil {
+// 		if os.IsNotExist(err) {
+// 			return false
+// 		}
+// 		panic(err)
+// 	} else {
+// 		return info.IsDir()
+// 	}
+// }
+
+func isFile(arg string) bool {
+	_, err := os.Stat(arg)
+	return !os.IsNotExist(err)
+}
+
+func isURL(arg string) bool {
+	_, err := url.Parse(arg)
+	return err == nil
+}
+
+// func handleDir(conf Config, arg string) {
+// 	exitCode := eval(conf.Directory, arg)
+// 	os.Exit(exitCode)
+// }
+
+func handleFile(conf Config, arg string) {
+	abs := do(filepath.Abs(arg))
+	ext := filepath.Ext(arg)
+	if ext != "" {
+		handleFileByExtension(conf, abs, ext)
+		// if we get here, we didn't find a match, so fallthrough to mime handling
+	}
+	handleFileByMime(conf, abs)
+	// if we get here, we didn't find a match, so fallthrough to default handling
+	handleDefault(conf, abs)
+}
+
+func handleFileByExtension(conf Config, arg string, ext string) {
+	for _, item := range conf.Extensions {
+		exts, cmd := item.Key.(string), item.Value.(string)
+		ee := strings.Split(exts, ",")
+		for _, e := range ee {
+			e = strings.Trim(e, " ")
+			if e == ext {
+				exitCode := eval(cmd, arg)
+				os.Exit(exitCode)
 			}
 		}
 	}
 }
 
-func execer(args ...string) int {
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	if err := cmd.Run(); err != nil {
+func handleFileByMime(conf Config, arg string) {
+	// Use the `file` command to determine the mime type
+	output := do(exec.Command("file", "-b", "--mime-type", arg).Output())
+	mimeType := parseMIME(string(output))
+
+	for _, item := range conf.Mimes {
+		mimes, cmd := item.Key.(string), item.Value.(string)
+		mm := strings.Split(mimes, ",")
+		for _, m := range mm {
+			// valid forms: "image/*", "image/jpeg", "video/mp4,video/quicktime"
+			m = strings.Trim(m, " ")
+			confType := parseMIME(m)
+			if confType.Type == "*" || confType.Type == mimeType.Type {
+				if confType.Subtype == "*" || confType.Subtype == mimeType.Subtype {
+					exitCode := eval(cmd, arg)
+					os.Exit(exitCode)
+				}
+			}
+		}
+	}
+}
+
+func handleURL(conf Config, arg string) {
+	panic("not implemented")
+}
+
+func handleDefault(conf Config, arg string) {
+	exitCode := eval(conf.Default, arg)
+	os.Exit(exitCode)
+}
+
+func eval(cmd string, arg string) int {
+	cmd = strings.ReplaceAll(cmd, "{}", arg)
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "sh"
+	}
+	c := exec.Command(shell, "-c", cmd)
+	c.Stderr = os.Stderr
+	c.Stdout = os.Stdout
+	if err := c.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -105,46 +166,90 @@ func execer(args ...string) int {
 	return 0
 }
 
-func piper(argss ...[]string) int {
-	if len(argss) == 0 {
-		return 0
+func maybeWriteDefaultConfig() {
+	home := do(os.UserHomeDir())
+	_, err := os.Stat(home + "/.fzf-preview/config.yml")
+	if !os.IsNotExist(err) {
+		return
 	}
-	if len(argss) == 1 {
-		return execer(argss[0]...)
-	}
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	cmd := exec.Command(argss[0][0], argss[0][1:]...)
-	cmd.Stderr = os.Stderr
-	pipe := do(cmd.StdoutPipe())
-	if err := cmd.Start(); err != nil {
+	if err := os.MkdirAll(home+"/.fzf-preview", 0755); err != nil {
 		panic(err)
 	}
-	wg.Add(1)
-	go func() {
-		cmd.Wait()
-		wg.Done()
-	}()
-	for _, args := range argss[1:] {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = pipe
-		pipe = do(cmd.StdoutPipe())
-		if err := cmd.Start(); err != nil {
-			panic(err)
-		}
-		wg.Add(1)
-		go func() {
-			cmd.Wait()
-			wg.Done()
-		}()
+	f := do(os.Create(home + "/.fzf-preview/config.yml"))
+	n := do(f.Write(config))
+	if n != len(config) {
+		panic("failed to write config")
 	}
-	if _, err := io.Copy(os.Stdout, pipe); err != nil {
-		panic(err)
-	}
-	return 0
 }
+
+func loadConfig() Config {
+	home := do(os.UserHomeDir())
+	configYML := do(os.Open(home + "/.fzf-preview/config.yml"))
+	var conf Config
+	if err := yaml.Unmarshal(do(io.ReadAll(configYML)), &conf); err != nil {
+		fmt.Printf("%+v\n", conf)
+		panic(err)
+	}
+	return conf
+}
+
+func replaceArg(arg string, cmd string) string {
+	return strings.ReplaceAll(cmd, "{}", arg)
+}
+
+// func execer(args ...string) int {
+// 	cmd := exec.Command(args[0], args[1:]...)
+// 	cmd.Stderr = os.Stderr
+// 	cmd.Stdout = os.Stdout
+// 	if err := cmd.Run(); err != nil {
+// 		if exitErr, ok := err.(*exec.ExitError); ok {
+// 			return exitErr.ExitCode()
+// 		}
+// 		panic(err)
+// 	}
+// 	return 0
+// }
+
+// func piper(argss ...[]string) int {
+// 	if len(argss) == 0 {
+// 		return 0
+// 	}
+// 	if len(argss) == 1 {
+// 		return execer(argss[0]...)
+// 	}
+// 	var wg sync.WaitGroup
+// 	defer wg.Wait()
+
+// 	cmd := exec.Command(argss[0][0], argss[0][1:]...)
+// 	cmd.Stderr = os.Stderr
+// 	pipe := do(cmd.StdoutPipe())
+// 	if err := cmd.Start(); err != nil {
+// 		panic(err)
+// 	}
+// 	wg.Add(1)
+// 	go func() {
+// 		cmd.Wait()
+// 		wg.Done()
+// 	}()
+// 	for _, args := range argss[1:] {
+// 		cmd := exec.Command(args[0], args[1:]...)
+// 		cmd.Stderr = os.Stderr
+// 		cmd.Stdin = pipe
+// 		pipe = do(cmd.StdoutPipe())
+// 		if err := cmd.Start(); err != nil {
+// 			panic(err)
+// 		}
+// 		wg.Add(1)
+// 		go func() {
+// 			cmd.Wait()
+// 			wg.Done()
+// 		}()
+// 	}
+// 	if _, err := io.Copy(os.Stdout, pipe); err != nil {
+// 		panic(err)
+// 	}
+// 	return 0
+// }
 
 // do is a generic function that will accept any type T and an error,
 // handle the error, then return T alone.
