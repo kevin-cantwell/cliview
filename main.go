@@ -9,46 +9,70 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/urfave/cli"
 	"gopkg.in/yaml.v2"
 
 	_ "embed"
 )
 
-//go:embed default-config.yml
-var config []byte
+var (
+	//go:embed default-config.yml
+	config []byte
+)
 
-/*
-TODO:
-Usage: cliview [--config|-c CONFIG] [file|dir|url|-]
-*/
 func main() {
 	log.SetFlags(0)
 
-	conf, err := loadConfig()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Println(err)
+		log.Println("Unable to determine home directory")
 		os.Exit(1)
 	}
 
-	arg := os.Args[1]
-
-	configs, err := parseManyToOneConfigs(conf.FileTypes)
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
+	app := cli.NewApp()
+	app.Version = "0.1.0"
+	app.Name = "cliview"
+	app.Usage = "Preview any file type directly in the shell."
+	app.UsageText = "cliview [options] FILE"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "config,c",
+			Usage: "Specify a config file to use.",
+			Value: filepath.Join(homeDir, ".config", "cliview", "config.yml"),
+		},
 	}
-
-	if isFile(arg) {
-		if n, err := handleFile(configs, arg); err != nil {
-			log.Println(err)
-			os.Exit(n)
-		} else {
-			os.Exit(0)
+	app.Action = func(c *cli.Context) error {
+		arg := c.Args().First()
+		if arg == "" {
+			return fmt.Errorf("No file specified")
 		}
+
+		conf, err := loadConfig(c.String("config"))
+		if err != nil {
+			log.Println(err)
+			os.Exit(1)
+		}
+
+		configs, err := parseManyToOneConfigs(conf.FileTypes)
+		if err != nil {
+			return err
+		}
+
+		if isFile(arg) {
+			if _, err := handleFile(configs, arg); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		log.Println("No preview available for:\n", arg)
+		return nil
 	}
 
-	log.Println("No preview available for:\n", arg)
-	os.Exit(1)
+	if err := app.Run(os.Args); err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
 }
 
 type Config struct {
@@ -186,19 +210,15 @@ func eval(cmd string, arg string) (int, error) {
 	return 0, nil
 }
 
-func maybeWriteDefaultConfig() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	if _, err := os.Stat(home + "/.cliview/config.yml"); !os.IsNotExist(err) {
+func maybeWriteDefaultConfig(configPath string) error {
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
 		// if the file already exists, don't overwrite it
 		return nil
 	}
-	if err := os.MkdirAll(home+"/.cliview", 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return err
 	}
-	f, err := os.Create(home + "/.cliview/config.yml")
+	f, err := os.Create(configPath)
 	if err != nil {
 		return err
 	}
@@ -208,17 +228,11 @@ func maybeWriteDefaultConfig() error {
 	return nil
 }
 
-func loadConfig() (*Config, error) {
-	if err := maybeWriteDefaultConfig(); err != nil {
+func loadConfig(configPath string) (*Config, error) {
+	if err := maybeWriteDefaultConfig(configPath); err != nil {
 		return nil, err
 	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
-	configYML, err := os.Open(homeDir + "/.cliview/config.yml")
+	configYML, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
 	}
