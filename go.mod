@@ -1,4 +1,4 @@
-module github.com/kevin-cantwell/fzf-preview
+module github.com/kevin-cantwell/cliview
 
 go 1.19
 

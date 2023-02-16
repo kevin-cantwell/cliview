@@ -17,6 +17,10 @@ import (
 //go:embed default-config.yml
 var config []byte
 
+/*
+TODO:
+Usage: cliview [--config|-c CONFIG] [file|dir|url|-]
+*/
 func main() {
 	maybeWriteDefaultConfig()
 	conf := loadConfig()
@@ -28,16 +32,16 @@ func main() {
 	// 	handleDir(conf, arg)
 	case isFile(arg):
 		handleFile(conf, arg)
-	case isURL(arg):
-		handleURL(conf, arg)
+	case isURI(arg):
+		handleURI(conf, arg)
 	}
-	fmt.Println("No preview available for:\n", arg)
+	fmt.Println("No view available for:\n", arg)
 }
 
 type Config struct {
 	Mimes      yaml.MapSlice
 	Extensions yaml.MapSlice
-	URLs       yaml.MapSlice
+	URIs       yaml.MapSlice
 	Default    string
 }
 
@@ -65,31 +69,15 @@ func parseMIME(s string) MIME {
 	}
 }
 
-// func isDir(arg string) bool {
-// 	if info, err := os.Stat(arg); err != nil {
-// 		if os.IsNotExist(err) {
-// 			return false
-// 		}
-// 		panic(err)
-// 	} else {
-// 		return info.IsDir()
-// 	}
-// }
-
 func isFile(arg string) bool {
 	_, err := os.Stat(arg)
 	return !os.IsNotExist(err)
 }
 
-func isURL(arg string) bool {
+func isURI(arg string) bool {
 	_, err := url.Parse(arg)
 	return err == nil
 }
-
-// func handleDir(conf Config, arg string) {
-// 	exitCode := eval(conf.Directory, arg)
-// 	os.Exit(exitCode)
-// }
 
 func handleFile(conf Config, arg string) {
 	abs := do(filepath.Abs(arg))
@@ -139,7 +127,7 @@ func handleFileByMime(conf Config, arg string) {
 	}
 }
 
-func handleURL(conf Config, arg string) {
+func handleURI(conf Config, arg string) {
 	panic("not implemented")
 }
 
@@ -168,14 +156,14 @@ func eval(cmd string, arg string) int {
 
 func maybeWriteDefaultConfig() {
 	home := do(os.UserHomeDir())
-	_, err := os.Stat(home + "/.fzf-preview/config.yml")
+	_, err := os.Stat(home + "/.cliview/config.yml")
 	if !os.IsNotExist(err) {
 		return
 	}
-	if err := os.MkdirAll(home+"/.fzf-preview", 0755); err != nil {
+	if err := os.MkdirAll(home+"/.cliview", 0755); err != nil {
 		panic(err)
 	}
-	f := do(os.Create(home + "/.fzf-preview/config.yml"))
+	f := do(os.Create(home + "/.cliview/config.yml"))
 	n := do(f.Write(config))
 	if n != len(config) {
 		panic("failed to write config")
@@ -184,7 +172,7 @@ func maybeWriteDefaultConfig() {
 
 func loadConfig() Config {
 	home := do(os.UserHomeDir())
-	configYML := do(os.Open(home + "/.fzf-preview/config.yml"))
+	configYML := do(os.Open(home + "/.cliview/config.yml"))
 	var conf Config
 	if err := yaml.Unmarshal(do(io.ReadAll(configYML)), &conf); err != nil {
 		fmt.Printf("%+v\n", conf)
@@ -196,60 +184,6 @@ func loadConfig() Config {
 func replaceArg(arg string, cmd string) string {
 	return strings.ReplaceAll(cmd, "{}", arg)
 }
-
-// func execer(args ...string) int {
-// 	cmd := exec.Command(args[0], args[1:]...)
-// 	cmd.Stderr = os.Stderr
-// 	cmd.Stdout = os.Stdout
-// 	if err := cmd.Run(); err != nil {
-// 		if exitErr, ok := err.(*exec.ExitError); ok {
-// 			return exitErr.ExitCode()
-// 		}
-// 		panic(err)
-// 	}
-// 	return 0
-// }
-
-// func piper(argss ...[]string) int {
-// 	if len(argss) == 0 {
-// 		return 0
-// 	}
-// 	if len(argss) == 1 {
-// 		return execer(argss[0]...)
-// 	}
-// 	var wg sync.WaitGroup
-// 	defer wg.Wait()
-
-// 	cmd := exec.Command(argss[0][0], argss[0][1:]...)
-// 	cmd.Stderr = os.Stderr
-// 	pipe := do(cmd.StdoutPipe())
-// 	if err := cmd.Start(); err != nil {
-// 		panic(err)
-// 	}
-// 	wg.Add(1)
-// 	go func() {
-// 		cmd.Wait()
-// 		wg.Done()
-// 	}()
-// 	for _, args := range argss[1:] {
-// 		cmd := exec.Command(args[0], args[1:]...)
-// 		cmd.Stderr = os.Stderr
-// 		cmd.Stdin = pipe
-// 		pipe = do(cmd.StdoutPipe())
-// 		if err := cmd.Start(); err != nil {
-// 			panic(err)
-// 		}
-// 		wg.Add(1)
-// 		go func() {
-// 			cmd.Wait()
-// 			wg.Done()
-// 		}()
-// 	}
-// 	if _, err := io.Copy(os.Stdout, pipe); err != nil {
-// 		panic(err)
-// 	}
-// 	return 0
-// }
 
 // do is a generic function that will accept any type T and an error,
 // handle the error, then return T alone.

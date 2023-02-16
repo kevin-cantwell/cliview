@@ -1,19 +1,19 @@
----
 mimes:
-  'inode/directory': 'exa -T "{}"'
-  'image/gif': &gif 'timg -g 80x400 -t .01 "{}"'
-  'image/*': &image 'timg -g 80x400 "{}"'
-  'video/*': &video 'timg -g --frames 1 -V "{}"'
-  'application/zip,application/zlib': &zip 'zipinfo -2hz "{}"'
+  inode/directory: exa -T '{}'
+  image/gif: &gif timg -g 80x400 -t .01 '{}'
+  image/*: &image timg -g 80x400 '{}'
+  video/*: &video timg -g 80x400 --frames 1 -V '{}'
+  application/zip,application/zlib: &zip zipinfo -2hz '{}'
+  application/vnd.sqlite3: &sqlite sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
 extensions:
-  '.jpg,.png,.webp,.webm': *image
-  '.gif': *gif
-  '.mov,.mp4': *video
-  '.md': 'mdcat "{}"'
-  '.zip': *zip 
-  '.gz': 'tar -tf "{}"'
-  '.dmg': '7zz l "{}"'
-  '.db': 'sqlite3 "{}" .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || ''+:''" -cmd ".mode columns" "{}" -cmd "pragma table_info(''+'')"'
-urls:
-  'http,https': 'curl -XGET "{}" | fzf-preview'
-default: 'grep -qE ''\x00'' "{}"; if [ $? -eq 0 ]; then bat -nA --color=always "{}"; else bat -n --color=always "{}"; fi'
+  .gif: *gif
+  .jpg,.png,.webp,.webm: *image
+  .mov,.mp4: *video
+  .zip: *zip
+  .db,.sqlite: *sqlite
+  .gz: tar -tf '{}'
+  .dmg: 7zz l '{}'
+  .md': mdcat '{}'
+uris:
+  http,https: curl -XGET '{}' | cliview
+default: grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi
