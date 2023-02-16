@@ -1,17 +1,12 @@
-mimes:
+file_types:
   inode/directory: exa -T '{}'
-  image/gif: &gif timg -g 80x400 -t .01 '{}'
-  image/*: &image timg -g 80x400 '{}'
-  video/*: &video timg -g 80x400 --frames 1 -V '{}'
-  application/zip,application/zlib: &zip zipinfo -2hz '{}'
-  application/vnd.sqlite3: &sqlite sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
-extensions:
-  .gif: *gif
-  .jpg,.png,.webp,.webm: *image
-  .mov,.mp4: *video
-  .zip: *zip
-  .db,.sqlite: *sqlite
-  .gz: tar -tf '{}'
-  .dmg: 7zz l '{}'
-  .md': mdcat '{}'
-default: grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi
+  inode/symlink: cliview $(readlink /Users/kcantwell/Library/Containers/com.apple.TextEdit/Data/Library/Preferences/com.apple.security.plist)
+  inode/*: file -I {}
+  image/gif: timg -g 80x400 -t .01 '{}'
+  image/*: timg -g 80x400 '{}'
+  video/*,.mov: timg -g 80x400 --frames 1 -V '{}'
+  application/zip,.zip,.dmg: 7zz l '{}'
+  application/vnd.sqlite3,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
+  application/gzip,.gz: tar -tf '{}'
+  .md: mdcat '{}'
+  default: grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi
