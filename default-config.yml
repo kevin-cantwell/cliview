@@ -14,6 +14,4 @@ extensions:
   .gz: tar -tf '{}'
   .dmg: 7zz l '{}'
   .md': mdcat '{}'
-uris:
-  http,https: curl -XGET '{}' | cliview
 default: grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi

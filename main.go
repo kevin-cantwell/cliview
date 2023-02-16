@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,12 +27,8 @@ func main() {
 	arg := os.Args[1]
 
 	switch {
-	// case isDir(arg):
-	// 	handleDir(conf, arg)
 	case isFile(arg):
 		handleFile(conf, arg)
-	case isURI(arg):
-		handleURI(conf, arg)
 	}
 	fmt.Println("No view available for:\n", arg)
 }
@@ -41,7 +36,6 @@ func main() {
 type Config struct {
 	Mimes      yaml.MapSlice
 	Extensions yaml.MapSlice
-	URIs       yaml.MapSlice
 	Default    string
 }
 
@@ -72,11 +66,6 @@ func parseMIME(s string) MIME {
 func isFile(arg string) bool {
 	_, err := os.Stat(arg)
 	return !os.IsNotExist(err)
-}
-
-func isURI(arg string) bool {
-	_, err := url.Parse(arg)
-	return err == nil
 }
 
 func handleFile(conf Config, arg string) {
@@ -125,10 +114,6 @@ func handleFileByMime(conf Config, arg string) {
 			}
 		}
 	}
-}
-
-func handleURI(conf Config, arg string) {
-	panic("not implemented")
 }
 
 func handleDefault(conf Config, arg string) {
