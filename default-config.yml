@@ -1,7 +1,22 @@
-file_types:
-  inode/directory: exa -T '{}'
+# Classifiers are used to calculate input types. 
+# If multiple classifiers are configured, each will be evaluated
+# in the order they are given. In this way, you can make a best-effort
+# classification followed by a fallback method (eg: mime-type then file extension)
+classifiers:
+  # MIME Type (eg: inode/symlink, video/quicktime, etc.)
+  - file -b --mime-type {}
+  # File extension with dot (eg: .zip, .txt, .java, etc.)
+  - filename='{}'; echo .${filename##*.}
+# Viewers map classification patterns to a command that prints a useful view of that type.
+# Multiple classification patterns may be specified for a single view command. 
+# Classification matches are evaluated in order (top to bottom, left to right) to determine which view is executed.
+# Classification patterns may be glob expressions. 
+viewers:
+  inode/directory: ls -ltraR '{}'
+  inode/symlink: cliview $(readlink {})
   inode/*: file -I {}
   application/zip,.zip: zipinfo '{}'
-  application/vnd.sqlite3,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
+  .db,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
   application/gzip,.gz: tar -tf '{}'
-  default: head -100
+  text/plain: cat {}
+  '*': xxd {}

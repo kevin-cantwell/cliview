@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gobwas/glob"
 	"github.com/urfave/cli"
 	"gopkg.in/yaml.v2"
 
@@ -37,36 +39,87 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "config,c",
-			Usage: "Specify a config file to use.",
+			Usage: "The config file to use.",
 			Value: filepath.Join(homeDir, ".config", "cliview", "config.yml"),
 		},
 	}
 	app.Action = func(c *cli.Context) error {
 		arg := c.Args().First()
 		if arg == "" {
-			return fmt.Errorf("No file specified")
+			return fmt.Errorf("No input specified")
 		}
 
-		conf, err := loadConfig(c.String("config"))
-		if err != nil {
-			log.Println(err)
-			os.Exit(1)
-		}
-
-		configs, err := parseManyToOneConfigs(conf.FileTypes)
+		configs, err := loadConfig(c.String("config"))
 		if err != nil {
 			return err
 		}
 
-		if isFile(arg) {
-			if _, err := handleFile(configs, arg); err != nil {
+		classifications := make([]string, len(configs.Classifiers))
+		for i, classifier := range configs.Classifiers {
+			buf := bytes.Buffer{}
+			if _, err := eval(classifier, arg, &buf); err != nil {
 				return err
 			}
-			return nil
+			classifications[i] = strings.TrimSpace(string(buf.Bytes()))
 		}
 
-		log.Println("No preview available for:\n", arg)
+		// Select and execute a viewer command by calculating the classification
+		// of the arg and matching it against the glob patterns in the config.
+		for _, viewer := range configs.Viewers {
+			for _, classification := range classifications {
+				g := glob.MustCompile(viewer.Classification)
+				if g.Match(classification) {
+					eval(viewer.Command, arg)
+					return err
+				}
+			}
+		}
+
+		log.Printf("No preview available for:\n%s\n", arg)
 		return nil
+	}
+	app.Commands = []cli.Command{
+		{
+			Name:  "config",
+			Usage: "Manage the configuration file.",
+			Action: func(c *cli.Context) error {
+				configPath := c.Parent().String("config")
+
+				if c.Bool("path") {
+					fmt.Println(configPath)
+					return nil
+				}
+
+				_, err := eval("cliview {}", configPath)
+				return err
+			},
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "path",
+					Usage: "Print the path to the config file and exit.",
+				},
+			},
+			Subcommands: []cli.Command{
+				{
+					Name:      "list",
+					Usage:     "Get the command associated with a filetype.",
+					UsageText: "cliview config cmd MIME|EXTENSION",
+					Action: func(c *cli.Context) error {
+						typ := c.Args().First()
+						if typ == "" {
+							return fmt.Errorf("No type specified")
+						}
+
+						configs, err := loadConfig(c.Parent().Parent().String("config"))
+						if err != nil {
+							return err
+						}
+						_ = configs
+						return nil
+					},
+				},
+			},
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -76,121 +129,46 @@ func main() {
 }
 
 type Config struct {
-	FileTypes yaml.MapSlice `yaml:"file_types"`
+	Classifiers []string `yaml:"classifiers"`
+	Viewers     Viewers  `yaml:"viewers"`
 }
 
-type MIME struct {
-	Type    string
-	Subtype string
-	Value   string
+type Viewer struct {
+	Classification string
+	Command        string
 }
 
-func parseMIME(s string) MIME {
-	parts := strings.Split(s, "/")
-	typ := strings.TrimSpace(parts[0])
-	if len(parts) == 1 {
-		return MIME{
-			Type:    typ,
-			Subtype: "",
-			Value:   typ,
-		}
+type Viewers []Viewer
+
+func (v *Viewers) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var viewers yaml.MapSlice
+	if err := unmarshal(&viewers); err != nil {
+		return err
 	}
-	sub := strings.TrimSpace(parts[1])
-	return MIME{
-		Type:    typ,
-		Subtype: sub,
-		Value:   typ + "/" + sub,
-	}
-}
-
-// parseManyToOneConfigs is a helper function to turn the configs into
-// an iterable list of command instructions.
-// Parses keys as a list of comma-separated strings and
-// maps each one to the command specified by the value
-func parseManyToOneConfigs(cmds yaml.MapSlice) ([][]string, error) {
-	var list [][]string
-	for _, item := range cmds {
-		types, ok := item.Key.(string)
+	*v = make(Viewers, 0)
+	for _, item := range viewers {
+		classifications, ok := item.Key.(string)
 		if !ok {
-			return nil, fmt.Errorf("config key must be a string: %v", item.Key)
+			return fmt.Errorf("config key must be a string: %v", item.Key)
 		}
 		command, ok := item.Value.(string)
 		if !ok {
-			return nil, fmt.Errorf("config value must be a string: %v", item.Value)
+			return fmt.Errorf("config value must be a string: %v", item.Value)
 		}
-		typs := strings.Split(types, ",")
-		for _, t := range typs {
-			t = strings.Trim(t, " ")
-			list = append(list, []string{t, command})
-		}
-	}
-	return list, nil
-}
-
-// Will return true if arg is a directory, file, or symlink
-func isFile(arg string) bool {
-	_, err := os.Lstat(arg)
-	return err == nil
-}
-
-func isMimeType(mime string) bool {
-	return strings.Count(mime, "/") == 1
-}
-
-func isExtension(ext string) bool {
-	return strings.HasPrefix(ext, ".")
-}
-
-func handleFile(configs [][]string, path string) (int, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return 0, err
-	}
-	ext := filepath.Ext(path)
-
-	// Use the `file` command to determine the mime type of the
-	output, err := exec.Command("file", "-b", "--mime-type", abs).Output()
-	if err != nil {
-		return 0, err
-	}
-
-	log.Println(string(output))
-
-	fileMIME := parseMIME(string(output))
-
-	for _, item := range configs {
-		typ, cmd := item[0], item[1]
-
-		switch {
-		case isMimeType(typ):
-			confMIME := parseMIME(typ)
-			if confMIME.Type == "*" || confMIME.Type == fileMIME.Type {
-				if confMIME.Subtype == "*" || confMIME.Subtype == fileMIME.Subtype {
-					return eval(cmd, abs)
-				}
-			}
-		case isExtension(typ):
-			if typ == ext {
-				return eval(cmd, abs)
-			}
+		typs := strings.Split(classifications, ",")
+		for _, typ := range typs {
+			typ = strings.TrimSpace(typ)
+			*v = append(*v, Viewer{
+				Classification: typ,
+				Command:        command,
+			})
 		}
 	}
 
-	// if we get here, we didn't find a match, so fallthrough to default handling
-	return handleDefault(configs, abs)
+	return nil
 }
 
-func handleDefault(configs [][]string, arg string) (int, error) {
-	for _, item := range configs {
-		typ, cmd := item[0], item[1]
-		if typ == "default" {
-			return eval(cmd, arg)
-		}
-	}
-	return 0, nil
-}
-
-func eval(cmd string, arg string) (int, error) {
+func eval(cmd string, arg string, stdout ...io.Writer) (int, error) {
 	cmd = strings.ReplaceAll(cmd, "{}", arg)
 	shell := os.Getenv("SHELL")
 	if shell == "" {
@@ -199,7 +177,11 @@ func eval(cmd string, arg string) (int, error) {
 
 	c := exec.Command(shell, "-c", cmd)
 	c.Stderr = os.Stderr
-	c.Stdout = os.Stdout
+	if len(stdout) > 0 {
+		c.Stdout = stdout[0]
+	} else {
+		c.Stdout = os.Stdout
+	}
 	if err := c.Run(); err != nil {
 		log.Println("error executing command:", cmd)
 		if exitErr, ok := err.(*exec.ExitError); ok {

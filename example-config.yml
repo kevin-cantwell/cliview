@@ -1,12 +1,15 @@
-file_types:
+classifiers:
+  - file -b --mime-type {}
+  - filename='{}'; echo .${filename##*.}
+viewers:
   inode/directory: exa -T '{}'
-  inode/symlink: cliview $(readlink /Users/kcantwell/Library/Containers/com.apple.TextEdit/Data/Library/Preferences/com.apple.security.plist)
+  inode/symlink: cliview "$(readlink -f '{}'')"
   inode/*: file -I {}
   image/gif: timg -g 80x400 -t .01 '{}'
   image/*: timg -g 80x400 '{}'
   video/*,.mov: timg -g 80x400 --frames 1 -V '{}'
   application/zip,.zip,.dmg: 7zz l '{}'
-  application/vnd.sqlite3,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
+  application/vnd.sqlite3,.sqlite,.db: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
   application/gzip,.gz: tar -tf '{}'
   .md: mdcat '{}'
-  default: grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi
+  '*': grep -qE '\x00' '{}'; if [ $? -eq 0 ]; then bat -nA --color=always '{}'; else bat --style=plain --color=always '{}'; fi
