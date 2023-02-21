@@ -34,7 +34,7 @@ func main() {
 	app := cli.NewApp()
 	app.Version = "0.1.0"
 	app.Name = "cliview"
-	app.Usage = "Preview any file type directly in the shell."
+	app.Usage = "Preview any file directly in the terminal."
 	app.UsageText = "cliview [options] FILE"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -50,24 +50,14 @@ func main() {
 	app.Action = func(c *cli.Context) error {
 		arg := c.Args().First()
 		if arg == "" {
-			return fmt.Errorf("No input specified")
+			return fmt.Errorf("No FILE specified")
 		}
-
+		explain := c.Bool("explain")
 		configs, err := loadConfig(c.String("config"))
 		if err != nil {
 			return err
 		}
 
-		show := c.Bool("explain")
-
-		// classifications := make([]string, len(configs.Classifiers))
-		// for i, classifier := range configs.Classifiers {
-		// 	buf := bytes.Buffer{}
-		// 	if _, err := eval(classifier, arg, &buf); err != nil {
-		// 		return err
-		// 	}
-		// 	classifications[i] = strings.TrimSpace(string(buf.Bytes()))
-		// }
 		cmd := strings.Join(configs.Classifiers, " ;")
 		buf := bytes.Buffer{}
 		if _, err := eval(cmd, arg, &buf); err != nil {
@@ -84,7 +74,7 @@ func main() {
 					return err
 				}
 				if g.Match(classification) {
-					if show {
+					if explain {
 						fmt.Println(strings.ReplaceAll(viewer.Command, "{}", arg))
 						return nil
 					} else {

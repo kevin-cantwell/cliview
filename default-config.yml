@@ -1,4 +1,4 @@
-# Classifiers are used to calculate input types. 
+# Classifiers are used to calculate file types. 
 # If multiple classifiers are configured, each will be evaluated
 # in the order they are given. In this way, you can make a best-effort
 # classification followed by a fallback method (eg: mime-type then file extension)
