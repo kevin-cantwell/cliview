@@ -1,10 +1,10 @@
 classifiers:
-  - file -b --mime-type {}
+  - file -b --mime-type '{}'
   - filename='{}'; echo .${filename##*.}
 viewers:
   inode/directory: exa -T '{}'
-  inode/symlink: cliview "$(readlink -f '{}'')"
-  inode/*: file -I {}
+  inode/symlink: cliview "$(readlink -f '{}')"
+  inode/*: file -I '{}'
   image/gif: timg -g 80x400 -t .01 '{}'
   image/*: timg -g 80x400 '{}'
   video/*,.mov: timg -g 80x400 --frames 1 -V '{}'

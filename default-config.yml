@@ -4,7 +4,7 @@
 # classification followed by a fallback method (eg: mime-type then file extension)
 classifiers:
   # MIME Type (eg: inode/symlink, video/quicktime, etc.)
-  - file -b --mime-type {}
+  - file -b --mime-type '{}'
   # File extension with dot (eg: .zip, .txt, .java, etc.)
   - filename='{}'; echo .${filename##*.}
 # Viewers map classification patterns to a command that prints a useful view of that type.
@@ -14,9 +14,9 @@ classifiers:
 viewers:
   inode/directory: ls -ltraR '{}'
   inode/symlink: cliview "$(readlink -f '{}')"
-  inode/*: file -I {}
+  inode/*: file -I '{}'
   application/zip,.zip: zipinfo '{}'
   .db,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
   application/gzip,.gz: tar -tf '{}'
-  text/plain: cat {}
-  '*': xxd {}
+  text/plain: cat '{}''
+  '*': xxd '{}'
