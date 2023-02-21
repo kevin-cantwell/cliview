@@ -4,9 +4,15 @@ Cliview is a command-line tool that allows one to customize views for any type o
 
 The inspiration for this tool comes from [`fzf`](https://github.com/junegunn/fzf)'s preview feature. One ought to be able to run `fzf --preview="cliview {}"` and be rewarded with powerful previews across a wide range of file types.
 
+### Installation
+
+See the [releases](https://github.com/kevin-cantwell/cliview/releases) page for binary releases.
+
+Or `go install github.com/kevin-cantwell/cliview@latest`
+
 ### Configuration
 
-The flexibility of the tool is derived from its configuration file, which allows one to customize "viewers", which are mappings of file types to shell commands which generate some output to view. For example, directories (`inode/directory`) can be mapped to `tree` or `exa` instead of `ls` (the default). Images or videos can be mapped to `imgcat` or `timg` to render a colorized visualization.
+The flexibility of the tool is derived from its configuration file, which allows one to customize "viewers", which are mappings of file types to shell commands that generate output. For example, directories (`inode/directory`) can be mapped to `tree` or `exa` instead of `ls` (the default). Images or videos can be mapped to `imgcat` or `timg` to render a colorized visualization.
 
 How files are classified into types can also be customized. By default, a file's mime-type and extension are used to determine which viewer command is executed.
 
