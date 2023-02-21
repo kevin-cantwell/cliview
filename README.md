@@ -37,3 +37,5 @@ GLOBAL OPTIONS:
    --help, -h                show help
    --version, -v             print the version
 ```
+
+[![asciinema](asciicast.png)](https://asciinema.org/a/eqWc58K2VtZO7WKzZJNymkmZM)
