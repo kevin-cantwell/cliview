@@ -13,7 +13,7 @@ classifiers:
 # Classification patterns may be glob expressions. 
 viewers:
   inode/directory: ls -ltraR '{}'
-  inode/symlink: cliview $(readlink {})
+  inode/symlink: cliview "$(readlink -f '{}')"
   inode/*: file -I {}
   application/zip,.zip: zipinfo '{}'
   .db,.sqlite: sqlite3 '{}' .tables | tr -s " " "\n" | xargs -I+ sqlite3 -cmd "select char(10) || '+:'" -cmd ".mode columns" -cmd "pragma table_info('+')" '{}'
