@@ -4,6 +4,10 @@ Cliview is a command-line tool that allows one to customize views for any type o
 
 The inspiration for this tool comes from [`fzf`](https://github.com/junegunn/fzf)'s preview feature. One ought to be able to run `fzf --preview="cliview {}"` and be rewarded with powerful previews across a wide range of file types.
 
+# Demo
+
+[![asciinema](asciicast.png)](https://asciinema.org/a/eqWc58K2VtZO7WKzZJNymkmZM)
+
 ### Installation
 
 See the [releases](https://github.com/kevin-cantwell/cliview/releases) page for binary releases.
@@ -37,5 +41,3 @@ GLOBAL OPTIONS:
    --help, -h                show help
    --version, -v             print the version
 ```
-
-[![asciinema](asciicast.png)](https://asciinema.org/a/eqWc58K2VtZO7WKzZJNymkmZM)
