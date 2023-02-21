@@ -42,6 +42,10 @@ func main() {
 			Usage: "The config file to use.",
 			Value: filepath.Join(homeDir, ".config", "cliview", "config.yml"),
 		},
+		cli.BoolFlag{
+			Name:  "explain,e",
+			Usage: "Print the configured view command without executing it.",
+		},
 	}
 	app.Action = func(c *cli.Context) error {
 		arg := c.Args().First()
@@ -54,72 +58,45 @@ func main() {
 			return err
 		}
 
-		classifications := make([]string, len(configs.Classifiers))
-		for i, classifier := range configs.Classifiers {
-			buf := bytes.Buffer{}
-			if _, err := eval(classifier, arg, &buf); err != nil {
-				return err
-			}
-			classifications[i] = strings.TrimSpace(string(buf.Bytes()))
+		show := c.Bool("explain")
+
+		// classifications := make([]string, len(configs.Classifiers))
+		// for i, classifier := range configs.Classifiers {
+		// 	buf := bytes.Buffer{}
+		// 	if _, err := eval(classifier, arg, &buf); err != nil {
+		// 		return err
+		// 	}
+		// 	classifications[i] = strings.TrimSpace(string(buf.Bytes()))
+		// }
+		cmd := strings.Join(configs.Classifiers, " ;")
+		buf := bytes.Buffer{}
+		if _, err := eval(cmd, arg, &buf); err != nil {
+			return err
 		}
+		classifications := strings.Split(string(buf.Bytes()), "\n")
 
 		// Select and execute a viewer command by calculating the classification
 		// of the arg and matching it against the glob patterns in the config.
 		for _, viewer := range configs.Viewers {
 			for _, classification := range classifications {
-				g := glob.MustCompile(viewer.Classification)
-				if g.Match(classification) {
-					eval(viewer.Command, arg)
+				g, err := glob.Compile(viewer.Classification)
+				if err != nil {
 					return err
+				}
+				if g.Match(classification) {
+					if show {
+						fmt.Println(strings.ReplaceAll(viewer.Command, "{}", arg))
+						return nil
+					} else {
+						eval(viewer.Command, arg)
+						return err
+					}
 				}
 			}
 		}
 
 		log.Printf("No preview available for:\n%s\n", arg)
 		return nil
-	}
-	app.Commands = []cli.Command{
-		{
-			Name:  "config",
-			Usage: "Manage the configuration file.",
-			Action: func(c *cli.Context) error {
-				configPath := c.Parent().String("config")
-
-				if c.Bool("path") {
-					fmt.Println(configPath)
-					return nil
-				}
-
-				_, err := eval("cliview {}", configPath)
-				return err
-			},
-			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:  "path",
-					Usage: "Print the path to the config file and exit.",
-				},
-			},
-			Subcommands: []cli.Command{
-				{
-					Name:      "list",
-					Usage:     "Get the command associated with a filetype.",
-					UsageText: "cliview config cmd MIME|EXTENSION",
-					Action: func(c *cli.Context) error {
-						typ := c.Args().First()
-						if typ == "" {
-							return fmt.Errorf("No type specified")
-						}
-
-						configs, err := loadConfig(c.Parent().Parent().String("config"))
-						if err != nil {
-							return err
-						}
-						_ = configs
-						return nil
-					},
-				},
-			},
-		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -174,7 +151,6 @@ func eval(cmd string, arg string, stdout ...io.Writer) (int, error) {
 	if shell == "" {
 		shell = "sh"
 	}
-
 	c := exec.Command(shell, "-c", cmd)
 	c.Stderr = os.Stderr
 	if len(stdout) > 0 {
