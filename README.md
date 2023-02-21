@@ -20,6 +20,10 @@ The flexibility of the tool is derived from its configuration file, which allows
 
 How files are classified into types can also be customized. By default, a file's mime-type and extension are used to determine which viewer command is executed.
 
+By default the config file is written to `$HOME/.cliview/config.yaml`. Edit this file to customize commands to your liking:
+
+https://github.com/kevin-cantwell/cliview/blob/b22a94df77d065a1f309ef177f18ee1e730392b1/default-config.yml#L1-L22
+
 ### Usage
 
 ```
